@@ -1,4 +1,3 @@
 fastapi
-uvicorn
-psycopg2
-
+uvicorn[standard]
+psycopg2-binary
