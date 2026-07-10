@@ -28,4 +28,4 @@ COPY . .
 EXPOSE 8000
 
 # Start FastAPI server using uvicorn, dynamically binding to cloud provider PORT if supplied
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
