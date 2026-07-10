@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html class="scroll-smooth" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>SkyBound | Elevated Flight Search & Calendar Integration</title>
+    <!-- Tailwind CSS with Forms and Container Query Plugins -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <!-- Tailwind Config -->
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#041627",
+                        "primary-container": "#1a2b3c",
+                        "primary-fixed-dim": "#b7c8de",
+                        "secondary": "#007AFF",
+                        "secondary-container": "#0058bc",
+                        "secondary-fixed": "#d8e2ff",
+                        "tertiary": "#00BFA5",
+                        "tertiary-container": "#005145",
+                        "tertiary-fixed": "#68fadd",
+                        "background": "#F4F7F9",
+                        "surface": "#ffffff",
+                        "surface-container": "#ebeef0",
+                        "surface-container-low": "#f1f4f6",
+                        "surface-container-high": "#e5e9eb",
+                        "surface-container-highest": "#e0e3e5",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#181c1e",
+                        "on-surface-variant": "#44474c",
+                        "outline": "#74777d",
+                        "outline-variant": "#c4c6cd",
+                        "error": "#ba1a1a",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-container": "#00a38d"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "sans": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="styles.css"/>
+</head>
+<body class="bg-background text-on-surface font-sans selection:bg-secondary-fixed selection:text-on-surface flex flex-col min-h-screen">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-surface sticky top-0 z-[60] shadow-sm flex justify-between items-center px-4 md:px-12 w-full h-20 transition-all duration-300">
+        <div class="flex items-center gap-8">
+            <a href="#" onclick="navigateTo('search-view')" class="text-2xl font-extrabold text-primary tracking-tight flex items-center gap-2">
+                <span class="material-symbols-outlined text-secondary text-3xl">flight_takeoff</span>
+                <span>SkyBound</span>
+            </a>
+            <nav class="hidden md:flex gap-6 ml-8">
+                <button id="nav-search" onclick="navigateTo('search-view')" class="font-semibold text-secondary border-b-2 border-secondary pb-1 transition-all duration-200">Search</button>
+                <button id="nav-dashboard" onclick="navigateTo('dashboard-view')" class="font-semibold text-on-surface-variant hover:text-secondary transition-all duration-200">Dashboard</button>
+            </nav>
+        </div>
+        <div class="flex items-center gap-4">
+            <!-- Notification Widget -->
+            <div class="relative">
+                <button class="relative p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200" id="notification-bell" onclick="toggleNotificationMenu()">
+                    <span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+                    <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-error rounded-full border-2 border-surface" id="notification-dot"></span>
+                </button>
+                <!-- Notification Dropdown -->
+                <div class="hidden absolute right-0 mt-2 w-80 bg-surface rounded-xl shadow-xl border border-outline-variant/30 py-2 z-50 transition-all" id="notification-menu">
+                    <div class="px-4 py-2 border-b border-outline-variant/30 flex justify-between items-center">
+                        <span class="font-bold text-primary">Notifications</span>
+                        <button onclick="clearNotifications()" class="text-xs text-secondary hover:underline">Clear all</button>
+                    </div>
+                    <div class="max-h-64 overflow-y-auto custom-scrollbar" id="notification-list">
+                        <div class="px-4 py-3 hover:bg-surface-container-low border-b border-outline-variant/10 flex gap-3 items-start cursor-pointer">
+                            <span class="material-symbols-outlined text-tertiary mt-0.5">trending_down</span>
+                            <div>
+                                <p class="text-sm font-semibold text-on-surface">DEL to BOM Price Drop Alert!</p>
+                                <p class="text-xs text-on-surface-variant">Vistara Flight UK-930 is now ₹3,800 (was ₹5,800).</p>
+                                <span class="text-[10px] text-outline">Just now</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Widget with Dropdown -->
+            <div class="relative">
+                <div class="flex items-center gap-3 border-l pl-4 border-outline-variant/40 cursor-pointer" onclick="toggleProfileMenu()">
+                    <div class="h-9 w-9 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant flex items-center justify-center">
+                        <img class="w-full h-full object-cover hidden" id="avatar-img" src="" alt="User Profile"/>
+                        <span class="material-symbols-outlined text-outline text-xl" id="avatar-placeholder">person</span>
+                    </div>
+                    <span class="hidden lg:inline text-sm font-semibold text-primary" id="username-display">Sign In</span>
+                </div>
+                
+                <!-- Profile dropdown menu -->
+                <div class="hidden absolute right-0 mt-2 w-48 bg-surface rounded-xl shadow-xl border border-outline-variant/30 py-2 z-50" id="profile-menu">
+                    <button onclick="navigateTo('dashboard-view'); toggleProfileMenu();" class="w-full text-left px-4 py-2 text-xs text-primary hover:bg-surface-container-low font-bold transition-colors flex items-center gap-2">
+                        <span class="material-symbols-outlined text-base">dashboard</span>
+                        <span>My Dashboard</span>
+                    </button>
+                    <button onclick="handleLogout(); toggleProfileMenu();" class="w-full text-left px-4 py-2 text-xs text-error hover:bg-error-container/10 font-bold transition-colors flex items-center gap-2 border-t border-outline-variant/10">
+                        <span class="material-symbols-outlined text-base">logout</span>
+                        <span>Log Out</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow">
+        
+        <!-- ============================================== -->
+        <!-- VIEW 1: SEARCH & DISCOVERY (HOME)               -->
+        <!-- ============================================== -->
+        <div id="search-view" class="view-panel transition-all duration-300">
+            <!-- Hero Search Section -->
+            <section class="relative h-[560px] w-full flex items-center justify-center overflow-hidden px-4 md:px-12">
+                <div class="absolute inset-0 z-0">
+                    <div class="w-full h-full bg-cover bg-center transition-transform duration-10000 ease-out scale-105" 
+                         style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAD_MgfFp1x5y0zB-i-LyGPr5yB72zs28TZuHqwzOi5KI9F5S6hOzmMcYu_XDpmQOiOqyPvlZIvro-wYqx-fyitZwQo1rMmcebgKEJljycxHM2D2VeU8edxYqV4uCYe4ZtlmGnDVAidB8B4yC8FIkRMOMdLNympEm_9WMn-ADDuwO8zTbD_0u_8KO5KN3cqEs3RjBBfc7CXi2ANm4014r1lF-KPtvsBfk09HUlraHdrKHHYno772stZh4NncCZyeN3fuvZe5MH5G9v1')">
+                    </div>
+                    <div class="absolute inset-0 bg-gradient-to-b from-primary/60 via-primary/30 to-background"></div>
+                </div>
+                
+                <div class="relative z-10 w-full max-w-6xl">
+                    <div class="mb-8 text-center md:text-left">
+                        <h1 class="font-extrabold text-3xl md:text-5xl text-white mb-2 drop-shadow-md tracking-tight">Explore Beyond Boundaries</h1>
+                        <p class="text-lg md:text-xl text-white/90 font-medium">Smart search for the lowest prices and maximum comfort.</p>
+                    </div>
+
+                    <!-- Search Panel -->
+                    <div class="bg-surface rounded-2xl p-6 md:p-8 shadow-2xl border border-outline-variant/10">
+                        <div class="flex gap-2 mb-6">
+                            <button id="trip-round" onclick="setTripType('round')" class="bg-secondary/10 text-secondary px-4 py-1.5 rounded-full text-sm font-semibold transition-all">Round Trip</button>
+                            <button id="trip-oneway" onclick="setTripType('oneway')" class="text-on-surface-variant hover:bg-surface-container-low px-4 py-1.5 rounded-full text-sm font-semibold transition-all">One Way</button>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-6 gap-4" id="search-inputs-grid">
+                            <!-- Origin -->
+                            <div class="relative group">
+                                <label class="absolute left-4 top-2 text-[10px] font-bold text-outline uppercase tracking-wider">From</label>
+                                <div class="flex items-center border border-outline-variant rounded-xl p-3 pt-6 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/10 transition-all">
+                                    <span class="material-symbols-outlined text-outline mr-2">flight_takeoff</span>
+                                    <input type="text" id="search-origin" class="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-semibold text-primary" placeholder="Origin City" value="Delhi (DEL)" autocomplete="off" onfocus="showSuggestions(this, 'origin-suggestions')" oninput="filterSuggestions(this, 'origin-suggestions')" onblur="hideSuggestions('origin-suggestions')"/>
+                                </div>
+                                <!-- Origin Suggestions dropdown -->
+                                <div id="origin-suggestions" class="hidden absolute left-0 right-0 mt-1 bg-surface rounded-xl shadow-xl border border-outline-variant/30 py-2 z-50 max-h-48 overflow-y-auto custom-scrollbar"></div>
+                            </div>
+                            <!-- Destination -->
+                            <div class="relative group">
+                                <label class="absolute left-4 top-2 text-[10px] font-bold text-outline uppercase tracking-wider">To</label>
+                                <div class="flex items-center border border-outline-variant rounded-xl p-3 pt-6 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/10 transition-all">
+                                    <span class="material-symbols-outlined text-outline mr-2">flight_land</span>
+                                    <input type="text" id="search-dest" class="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-semibold text-primary" placeholder="Destination City" value="Mumbai (BOM)" autocomplete="off" onfocus="showSuggestions(this, 'dest-suggestions')" oninput="filterSuggestions(this, 'dest-suggestions')" onblur="hideSuggestions('dest-suggestions')"/>
+                                </div>
+                                <!-- Dest Suggestions dropdown -->
+                                <div id="dest-suggestions" class="hidden absolute left-0 right-0 mt-1 bg-surface rounded-xl shadow-xl border border-outline-variant/30 py-2 z-50 max-h-48 overflow-y-auto custom-scrollbar"></div>
+                            </div>
+                            <!-- Departure Date -->
+                            <div class="relative group" id="departure-date-container">
+                                <label class="absolute left-4 top-2 text-[10px] font-bold text-outline uppercase tracking-wider">Departure Date</label>
+                                <div class="flex items-center border border-outline-variant rounded-xl p-3 pt-6 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/10 transition-all">
+                                    <span class="material-symbols-outlined text-outline mr-2">calendar_month</span>
+                                    <input type="date" id="search-dep-date" class="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-semibold text-primary" required/>
+                                </div>
+                            </div>
+                            <!-- Return Date -->
+                            <div class="relative group" id="return-date-container">
+                                <label class="absolute left-4 top-2 text-[10px] font-bold text-outline uppercase tracking-wider">Return Date</label>
+                                <div class="flex items-center border border-outline-variant rounded-xl p-3 pt-6 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/10 transition-all">
+                                    <span class="material-symbols-outlined text-outline mr-2">calendar_month</span>
+                                    <input type="date" id="search-ret-date" class="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-semibold text-primary" required/>
+                                </div>
+                            </div>
+                            <!-- Travelers -->
+                            <div class="relative group">
+                                <label class="absolute left-4 top-2 text-[10px] font-bold text-outline uppercase tracking-wider">Travelers</label>
+                                <div class="flex items-center border border-outline-variant rounded-xl p-3 pt-6 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/10 transition-all">
+                                    <span class="material-symbols-outlined text-outline mr-2">group</span>
+                                    <select id="search-passengers" class="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-semibold text-primary appearance-none">
+                                        <option value="1" selected>1 Passenger</option>
+                                        <option value="2">2 Passengers</option>
+                                        <option value="3">3 Passengers</option>
+                                        <option value="4">4 Passengers</option>
+                                        <option value="5">5 Passengers</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <!-- Class -->
+                            <div class="relative group">
+                                <label class="absolute left-4 top-2 text-[10px] font-bold text-outline uppercase tracking-wider">Cabin Class</label>
+                                <div class="flex items-center border border-outline-variant rounded-xl p-3 pt-6 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/10 transition-all">
+                                    <span class="material-symbols-outlined text-outline mr-2">airline_seat_recline_normal</span>
+                                    <select id="search-class" class="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-semibold text-primary appearance-none">
+                                        <option value="Economy">Economy</option>
+                                        <option value="Premium" selected>Premium Economy</option>
+                                        <option value="Business">Business</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 flex justify-end">
+                            <button onclick="performSearch()" class="bg-secondary text-white px-8 py-3.5 rounded-xl font-bold text-base flex items-center gap-2 hover:bg-secondary-container hover:shadow-lg hover:shadow-secondary/20 transition-all duration-300">
+                                <span class="material-symbols-outlined">search</span>
+                                <span>Search Flights</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Featured Deals Section -->
+            <section id="deals-section" class="py-16 px-4 md:px-12 max-w-[1440px] mx-auto">
+                <div class="flex justify-between items-end mb-8">
+                    <div>
+                        <h2 class="text-3xl font-extrabold text-primary mb-2">Top Deals of the Day</h2>
+                        <p class="text-on-surface-variant max-w-xl">Curated exceptional offers for the world's most popular routes, combining budget efficiency and premium travel comfort.</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    <!-- Deal 1 -->
+                    <div class="group bg-surface rounded-2xl overflow-hidden shadow-md hover:shadow-xl card-shadow border border-outline-variant/20 transition-all duration-300">
+                        <div class="relative h-64 overflow-hidden">
+                            <div class="w-full h-full bg-cover bg-center transition-transform duration-500 group-hover:scale-105" 
+                                 style="background-image: url('https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=600&q=80')">
+                            </div>
+                            <div class="absolute top-4 left-4">
+                                <span class="bg-tertiary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-xs fill-current">star</span>
+                                    <span>Best Amenities Combo</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-xl font-bold text-primary">Bengaluru, India</h3>
+                                    <p class="text-sm text-on-surface-variant">Silicon Valley of India</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-outline line-through">₹8,400</p>
+                                    <p class="text-2xl font-extrabold text-secondary">₹5,800</p>
+                                    <p class="text-[10px] font-bold text-outline uppercase tracking-wider">Round Trip</p>
+                                </div>
+                            </div>
+                            <button onclick="dealSearch('Delhi (DEL)', 'Bengaluru (BLR)')" class="w-full py-2.5 border border-secondary text-secondary rounded-xl font-semibold hover:bg-secondary hover:text-white transition-all duration-300">View Search Results</button>
+                        </div>
+                    </div>
+
+                    <!-- Deal 2 -->
+                    <div class="group bg-surface rounded-2xl overflow-hidden shadow-md hover:shadow-xl card-shadow border border-outline-variant/20 transition-all duration-300">
+                        <div class="relative h-64 overflow-hidden">
+                            <div class="w-full h-full bg-cover bg-center transition-transform duration-500 group-hover:scale-105" 
+                                 style="background-image: url('https://images.unsplash.com/photo-1566552881560-0be862a7c445?auto=format&fit=crop&w=600&q=80')">
+                            </div>
+                            <div class="absolute top-4 left-4">
+                                <span class="bg-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-xs">percent</span>
+                                    <span>Top Discounted</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-xl font-bold text-primary">Mumbai, India</h3>
+                                    <p class="text-sm text-on-surface-variant">City of Dreams</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-outline line-through">₹7,800</p>
+                                    <p class="text-2xl font-extrabold text-secondary">₹4,600</p>
+                                    <p class="text-[10px] font-bold text-outline uppercase tracking-wider">Round Trip</p>
+                                </div>
+                            </div>
+                            <button onclick="dealSearch('Delhi (DEL)', 'Mumbai (BOM)')" class="w-full py-2.5 border border-secondary text-secondary rounded-xl font-semibold hover:bg-secondary hover:text-white transition-all duration-300">View Search Results</button>
+                        </div>
+                    </div>
+
+                    <!-- Deal 3 -->
+                    <div class="group bg-surface rounded-2xl overflow-hidden shadow-md hover:shadow-xl card-shadow border border-outline-variant/20 transition-all duration-300">
+                        <div class="relative h-64 overflow-hidden">
+                            <div class="w-full h-full bg-cover bg-center transition-transform duration-500 group-hover:scale-105" 
+                                 style="background-image: url('https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=600&q=80')">
+                            </div>
+                            <div class="absolute top-4 left-4">
+                                <span class="bg-tertiary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-xs">local_fire_department</span>
+                                    <span>Selling Fast</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-xl font-bold text-primary">Kochi, Kerala</h3>
+                                    <p class="text-sm text-on-surface-variant">Queen of the Arabian Sea</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-outline line-through">₹6,200</p>
+                                    <p class="text-2xl font-extrabold text-secondary">₹3,900</p>
+                                    <p class="text-[10px] font-bold text-outline uppercase tracking-wider">Round Trip</p>
+                                </div>
+                            </div>
+                            <button onclick="dealSearch('Delhi (DEL)', 'Kochi (COK)')" class="w-full py-2.5 border border-secondary text-secondary rounded-xl font-semibold hover:bg-secondary hover:text-white transition-all duration-300">View Search Results</button>
+                        </div>
+                    </div>
+
+                    <!-- Deal 4 (Economical + High Comfort Anywhere) -->
+                    <div class="group bg-surface rounded-2xl overflow-hidden shadow-md hover:shadow-xl card-shadow border border-outline-variant/20 transition-all duration-300 flex flex-col justify-between">
+                        <div class="relative h-64 overflow-hidden bg-primary-fixed-dim">
+                            <div class="w-full h-full bg-cover bg-center transition-transform duration-500 group-hover:scale-105" 
+                                 style="background-image: url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=600&q=80')">
+                            </div>
+                            <div class="absolute inset-0 bg-primary/30"></div>
+                            <div class="absolute top-4 left-4">
+                                <span class="bg-tertiary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-xs">payments</span>
+                                    <span>Economic Pick</span>
+                                </span>
+                            </div>
+                            <div class="absolute bottom-4 left-4 right-4 text-white">
+                                <span class="bg-secondary text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider block w-max mb-1">Comfort Saver</span>
+                                <p class="text-sm font-bold leading-tight">Fly Anywhere Comfort Deal</p>
+                            </div>
+                        </div>
+                        <div class="p-6 flex-grow flex flex-col justify-between">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-lg font-bold text-primary">Global Comfort Deal</h3>
+                                    <p class="text-xs text-on-surface-variant font-medium">Max amenities, low fare combo</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-outline line-through">₹5,800</p>
+                                    <p class="text-2xl font-extrabold text-secondary">₹3,800</p>
+                                    <p class="text-[10px] font-bold text-outline uppercase tracking-wider">Round Trip</p>
+                                </div>
+                            </div>
+                            <button onclick="dealSearch('Delhi (DEL)', 'Mumbai (BOM)')" class="w-full py-2.5 border border-secondary text-secondary rounded-xl font-semibold hover:bg-secondary hover:text-white transition-all duration-300">Search Economical Comfort</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Newsletter Section -->
+            <section class="bg-primary py-16 px-4 md:px-12 text-white text-center rounded-t-[2rem] md:rounded-t-[4rem]">
+                <div class="max-w-2xl mx-auto">
+                    <span class="material-symbols-outlined text-5xl text-secondary mb-4 animate-bounce">notifications_active</span>
+                    <h2 class="text-3xl font-extrabold mb-4">Never miss a flight drop again</h2>
+                    <p class="text-white/80 text-base mb-8">Our real-time price monitoring automatically targets your budgets and alerts you as soon as the price range matches your parameters, listing amenities scores.</p>
+                    <div class="flex flex-col md:flex-row gap-3">
+                        <input type="email" placeholder="Enter your email address" class="flex-grow px-4 py-3.5 rounded-xl bg-white text-primary border-none focus:ring-2 focus:ring-secondary text-sm"/>
+                        <button onclick="subscribeAlert()" class="bg-secondary text-white px-8 py-3.5 rounded-xl font-bold hover:bg-secondary-container transition-all whitespace-nowrap">Get Free Price Alerts</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 2: SEARCH RESULTS                         -->
+        <!-- ============================================== -->
+        <div id="results-view" class="view-panel hidden transition-all duration-300">
+            <div class="max-w-[1440px] mx-auto px-4 md:px-12 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Filters Sidebar -->
+                <aside class="lg:col-span-3 space-y-6">
+                    <div class="bg-surface p-6 rounded-2xl card-shadow border border-outline-variant/30">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-lg text-primary">Filters</h3>
+                            <button onclick="resetFilters()" class="text-xs text-secondary font-semibold hover:underline">Reset All</button>
+                        </div>
+
+                        <!-- Price Range Slider -->
+                        <div class="mb-6 pb-6 border-b border-outline-variant/20">
+                            <label class="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-3">Price Range</label>
+                            <input type="range" id="filter-price-slider" class="w-full h-1.5 bg-surface-container-high rounded-lg appearance-none cursor-pointer accent-secondary" min="3000" max="15000" value="10000" oninput="updatePriceSlider(this.value)"/>
+                            <div class="flex justify-between mt-2">
+                                <span class="text-xs text-outline font-medium">₹3,000</span>
+                                <span class="text-sm font-bold text-secondary" id="slider-price-display">₹10,000</span>
+                                <span class="text-xs text-outline font-medium">₹15,000</span>
+                            </div>
+                        </div>
+
+                        <!-- Maximize Amenities Toggle -->
+                        <div class="mb-6 pb-6 border-b border-outline-variant/20 bg-tertiary/5 p-4 rounded-xl border border-tertiary/20">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-xs font-bold text-tertiary-container uppercase tracking-wider block">Optimize Value</label>
+                                    <span class="text-xs text-on-surface-variant font-medium">Show only high amenity trips (&ge; 8.0)</span>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="filter-max-amenities" class="sr-only peer" onchange="applyFilters()"/>
+                                    <div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-tertiary"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Amenities Checklist -->
+                        <div class="mb-6 pb-6 border-b border-outline-variant/20">
+                            <label class="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-3">Include Amenities</label>
+                            <div class="space-y-3" id="amenity-checklist-container">
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" class="amenity-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="wifi" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">Free Wi-Fi (50+ Mbps)</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" class="amenity-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="legroom" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">Extra Legroom (34"+)</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" class="amenity-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="meal" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">Gourmet Meals Included</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" class="amenity-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="power" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">AC & USB-C Power Outlets</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" class="amenity-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="entertainment" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">4K HDR Seatback Screen</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Airlines Checklist -->
+                        <div>
+                            <label class="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-3">Airlines</label>
+                            <div class="space-y-3">
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" checked class="airline-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="IndiGo" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">IndiGo</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" checked class="airline-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="Air India" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">Air India</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" checked class="airline-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="Vistara" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">Vistara</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" checked class="airline-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="Akasa Air" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">Akasa Air</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input type="checkbox" checked class="airline-filter-check w-5 h-5 rounded border-outline-variant text-secondary focus:ring-secondary/20" value="SpiceJet" onchange="applyFilters()"/>
+                                    <span class="text-sm text-on-surface group-hover:text-secondary transition-colors font-medium">SpiceJet</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Search Results List -->
+                <section class="lg:col-span-9 space-y-6">
+                    <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                        <div>
+                            <h2 class="text-2xl font-extrabold text-primary" id="results-headline">Flights from Delhi to Mumbai</h2>
+                            <p class="text-sm text-on-surface-variant" id="results-count">5 flights matching your filters</p>
+                        </div>
+                        <div class="flex items-center gap-2 self-end">
+                            <span class="text-xs font-semibold text-on-surface-variant">Sort by:</span>
+                            <select id="sort-select" onchange="sortFlights(this.value)" class="bg-transparent border-none text-sm font-bold text-secondary focus:ring-0 cursor-pointer p-1">
+                                <option value="best">Best Value (Score / Price)</option>
+                                <option value="price-low">Price (Low to High)</option>
+                                <option value="amenities-high">Amenities Score (High to Low)</option>
+                                <option value="duration">Duration (Shortest)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Flights List Container -->
+                    <div class="space-y-4" id="flights-list-container">
+                        <!-- Dynamic Cards Inserted Here -->
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 3: FLIGHT DETAILS & SEAT SELECTION       -->
+        <!-- ============================================== -->
+        <div id="details-view" class="view-panel hidden transition-all duration-300">
+            <div class="max-w-[1440px] mx-auto px-4 md:px-12 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                <!-- Left Details Area -->
+                <div class="lg:col-span-8 space-y-6">
+                    <button onclick="navigateTo('results-view')" class="flex items-center gap-1 text-sm font-bold text-secondary hover:underline">
+                        <span class="material-symbols-outlined text-sm">arrow_back</span>
+                        <span>Back to search results</span>
+                    </button>
+
+                    <!-- Header Route Info Card -->
+                    <section class="bg-surface p-6 md:p-8 rounded-2xl card-shadow border border-outline-variant/20">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <h1 class="text-3xl font-extrabold text-primary tracking-tight" id="detail-route">Delhi to Mumbai</h1>
+                                <p class="text-sm text-on-surface-variant" id="detail-flight-num">Flight 6E-2034 • Airbus A321neo</p>
+                            </div>
+                            <span class="bg-tertiary/10 text-tertiary-container px-3 py-1 rounded-full text-xs font-bold" id="detail-amenity-pill">Score: 9.4/10</span>
+                        </div>
+
+                        <!-- Flight Route Visualization -->
+                        <div class="flex items-center justify-between py-6 border-y border-outline-variant/30">
+                            <div>
+                                <span class="block text-3xl font-extrabold text-primary" id="detail-dep-time">10:45 AM</span>
+                                <span class="block text-sm font-bold text-on-surface-variant" id="detail-dep-airport">DEL</span>
+                                <span class="text-xs text-outline" id="detail-dep-city">Delhi, India</span>
+                            </div>
+                            <div class="flex-grow px-6 flex flex-col items-center">
+                                <span class="text-xs text-on-surface-variant mb-1 font-medium" id="detail-duration">2h 10m (Direct)</span>
+                                <div class="relative w-full h-[2px] bg-outline-variant flex items-center justify-between">
+                                    <div class="w-2 h-2 bg-secondary rounded-full"></div>
+                                    <span class="material-symbols-outlined text-secondary bg-surface px-1 text-lg">flight</span>
+                                    <div class="w-2 h-2 bg-secondary rounded-full"></div>
+                                </div>
+                                <span class="text-xs text-on-tertiary-container font-semibold mt-1 bg-tertiary/10 px-2 py-0.5 rounded">On Time</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-3xl font-extrabold text-primary" id="detail-arr-time">12:55 PM</span>
+                                <span class="block text-sm font-bold text-on-surface-variant" id="detail-arr-airport">BOM</span>
+                                <span class="text-xs text-outline" id="detail-arr-city">Mumbai, India</span>
+                            </div>
+                        </div>
+
+                        <!-- Plane Specs -->
+                        <div class="mt-6 flex flex-col md:flex-row items-center gap-4">
+                            <div class="w-full md:w-32 h-24 rounded-xl overflow-hidden bg-surface-container">
+                                <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAOFY6WJsQQ686klqmxF3jWlDTGcxKqk-ORYWV6tVRUbXn-XgJc4vi2LMRR_orSHYy9G-pnKZZ-8_By2384w7LYeiZU3kOkeV6W_u0aSsuDkAe8hNuQKuKL5HFal5x_du8Y2Wzh0CgIa45z1ta75ZTgPL4Y-23QjTBZ9gQTjWrQERBjaiC30IJ7LqSolzD-Mo7fUjE21ijnSSDEAChRSRkx35GwBIDvJQ43kM3dKXQS8TUOD4GbMzQ3WvuCWAY-5OYTUp9SX_YM5VA" alt="Airbus A350 Interior"/>
+                            </div>
+                            <div class="flex-grow">
+                                <span class="block font-bold text-primary text-base" id="detail-plane-model">Airbus A350-1000 Cabin Experience</span>
+                                <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
+                                    Next-generation aerodynamic design with advanced acoustic insulation, high humidity control systems, and full-spectrum LED ambient lighting designed to reduce jet lag over long flights.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Seat Map Visualizer -->
+                    <section class="bg-surface p-6 rounded-2xl card-shadow border border-outline-variant/20">
+                        <h3 class="text-lg font-bold text-primary mb-2 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-secondary">airline_seat_recline_normal</span>
+                            <span>Select Your Seat</span>
+                        </h3>
+                        <p class="text-xs text-on-surface-variant mb-6">Choose an available seat on the deck. High comfort rows are highlighted.</p>
+                        
+                        <div class="flex flex-col md:flex-row gap-8 items-center justify-center p-4 bg-surface-container-low rounded-xl border border-outline-variant/10">
+                            <!-- Seat Grid Map Layout -->
+                            <div class="w-full max-w-sm bg-surface p-6 rounded-2xl border border-outline-variant/30 flex flex-col items-center">
+                                <div class="w-full text-center text-xs font-bold text-outline border-b pb-2 mb-4">FRONT OF AIRCRAFT</div>
+                                
+                                <div class="space-y-3" id="seat-grid-container">
+                                    <!-- Dynamic rows created in javascript -->
+                                </div>
+                                <div class="w-full text-center text-xs font-bold text-outline border-t pt-2 mt-4">BACK OF AIRCRAFT</div>
+                            </div>
+
+                            <!-- Legend -->
+                            <div class="flex flex-col gap-4 text-xs font-semibold">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded bg-surface border border-outline-variant"></div>
+                                    <span>Standard Seat (Included)</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded bg-tertiary/10 border border-tertiary text-tertiary-container flex items-center justify-center font-bold text-[10px]">E</div>
+                                    <span>Extra Legroom (+ ₹1,500.00)</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded bg-outline/20 cursor-not-allowed"></div>
+                                    <span>Occupied / Unavailable</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-6 h-6 rounded bg-secondary text-white border border-secondary"></div>
+                                    <span>Selected Seat</span>
+                                </div>
+                                <div class="mt-4 p-3 bg-surface-container rounded-lg border border-outline-variant/20">
+                                    <p class="text-xs font-bold text-primary">Your Selected Seat:</p>
+                                    <p class="text-sm font-extrabold text-secondary mt-0.5" id="selected-seat-badge">None Selected</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Cabin Visual Bento Box -->
+                    <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="col-span-2 row-span-2 rounded-2xl overflow-hidden relative group h-64 md:h-auto">
+                            <img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5hy3zOjY9_d3B2XIV0L1XMfrcYOMP2CaXbb84HI6u2qKrODrCSx5VVWmWGRBix3vW3RTpQClW_DCMMe7H4f0KVs0-6Ry1kucbUSLxTVbnmFvVBl5weifhuSIsqO2j6QR7tCNR3adOqGUjyowNZitXxbTurqt_h5NwujqAVco8NsqWSYfP2rb1Wxved0omItfqVezDKfpsvLcVcVJwmUmMuFzcuYU3VT2nfVCGWSiY2G0llWiGvxLlZsf8e3qWF71EZMeGg_H2FvbO" alt="Premium Cabin Interior"/>
+                            <div class="absolute bottom-0 left-0 p-4 bg-gradient-to-t from-black/60 to-transparent w-full">
+                                <span class="text-white text-xs font-bold">Main Cabin Comfort</span>
+                            </div>
+                        </div>
+                        <div class="rounded-xl overflow-hidden h-32 md:h-40">
+                            <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA29Psl39UX8JxVBL4imYPZ9b9ML8yHRq-2txDSlvZGIzERQTcHZm1Tsu7bKn9uP7Y49V3Jg2N5cV4ZmWe8D3dyOBgb1dSSC4Y4Uo67noikpgo0kbNxRWgWXKvDS4F61BEWXKHOH2Qq7-oHm2msb66iM3kbiug80trMUWiIM6cVCncBwfUY54DgeqkqtRE013ER7mU5d40MOoJjKgk8kg4uVVMtPTfDsJAQpuyh7WtluzuMZwpliz-pbJLr-ZISeCrhiK865cexMmHG" alt="Gourmet Meal"/>
+                        </div>
+                        <div class="rounded-xl overflow-hidden h-32 md:h-40">
+                            <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDD0pQDobgjm7dXx_iEc2ScoRUM9senbWRTgR9_309q1W5VtsebD4CgexidKXrirLm6LJpHERSbjgBf5_tSPndrfXuIozu6C5ynC1k_TYmqLjhP7ZVQr-9UsC4rsO-NUgjDYApImzRr9FyN_dBHW2p1OYo6N8SuIMWKD2djqIjoxkjGZRCiySyaDLPe2dbe2gtEUnI6M2jQWxy5WwUjs3FMQVYXfORxKzWTlmCR97qO8vv4kE9VEsXnq1ZCwHHN-fIn3JDCN4eCCSXL" alt="Seatback Screen"/>
+                        </div>
+                        <div class="col-span-2 h-36 rounded-xl overflow-hidden relative">
+                            <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD0pnQHaPzFo1Z2D2zIOLQ_0URXsKJV1UBUxhdhQQ5d09LRRECyy-_jzjLUjau2RhG1k7pBk0vTvo1h_9bUitR881XaaAwAdrrzuVaJvUUC4rg6omFHl7LZxWyYslCek2KCzlMFc4w9dGStLiSlXsNZfwP-NVFQTQ-0DURzItT_UcTumwDXjXndicI5cmDxPo1x3KWZF0u2OmuxIzMTduQegeKY3Eg2hFH5XW133TCkNJCYuKaRIYvqYue5xRdfxlnFcs9DD1NwOtu6" alt="Plane Window View"/>
+                            <div class="absolute inset-0 bg-primary/20 flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-all duration-300">
+                                <span class="material-symbols-outlined text-white text-5xl opacity-80">play_circle</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Sticky Booking Side panel -->
+                <aside class="lg:col-span-4 lg:sticky lg:top-24 space-y-6">
+                    <div class="bg-surface p-6 rounded-2xl card-shadow border border-outline-variant/30">
+                        <div class="flex justify-between items-center mb-6">
+                            <span class="text-2xl font-extrabold text-primary" id="side-total-price">₹5,800.00</span>
+                            <span class="bg-tertiary/10 text-on-tertiary-container px-3 py-1 rounded-full text-xs font-bold" id="side-tag">Best Value</span>
+                        </div>
+
+                        <!-- Class Switcher -->
+                        <div class="space-y-2 mb-6">
+                            <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider">Flight Class</label>
+                            <div class="grid grid-cols-3 gap-1.5" id="side-class-container">
+                                <button onclick="setDetailClass('Economy')" id="class-btn-Economy" class="border border-outline-variant py-2 rounded-lg text-center text-xs font-semibold hover:border-secondary transition-all">Economy</button>
+                                <button onclick="setDetailClass('Premium')" id="class-btn-Premium" class="border-2 border-secondary bg-secondary/5 py-2 rounded-lg text-center text-xs font-bold text-secondary transition-all">Premium</button>
+                                <button onclick="setDetailClass('Business')" id="class-btn-Business" class="border border-outline-variant py-2 rounded-lg text-center text-xs font-semibold hover:border-secondary transition-all">Business</button>
+                            </div>
+                        </div>
+
+                        <!-- Price Breakdown -->
+                        <div class="bg-surface-container-low p-4 rounded-xl space-y-2 mb-6 text-xs font-medium">
+                            <div class="flex justify-between text-on-surface-variant">
+                                <span id="breakdown-base-label">Base Fare (1 Traveler)</span>
+                                <span class="text-primary font-bold" id="breakdown-base">₹5,200.00</span>
+                            </div>
+                            <div class="flex justify-between text-on-surface-variant">
+                                <span>Taxes & Fees</span>
+                                <span class="text-primary font-bold" id="breakdown-tax">₹600.00</span>
+                            </div>
+                            <div class="flex justify-between text-on-surface-variant" id="seat-upgrade-row" style="display: none;">
+                                <span class="text-tertiary font-bold" id="breakdown-upgrade-label">Extra Legroom Upgrade</span>
+                                <span class="text-tertiary font-bold" id="breakdown-upgrade">+₹1,500.00</span>
+                            </div>
+                            <div class="pt-2 border-t border-outline-variant flex justify-between text-sm">
+                                <span class="font-bold text-primary">Total Price</span>
+                                <span class="font-extrabold text-primary" id="breakdown-total">₹5,800.00</span>
+                            </div>
+                        </div>
+
+                        <!-- CTA Button -->
+                        <button onclick="openBookingForm()" class="w-full bg-secondary text-white py-3.5 rounded-xl font-bold text-base hover:bg-secondary-container hover:shadow-lg transition-all flex items-center justify-center gap-1">
+                            <span>Proceed to Passenger Info</span>
+                            <span class="material-symbols-outlined">arrow_forward</span>
+                        </button>
+                        
+                        <p class="mt-4 text-[10px] text-outline text-center leading-normal">
+                            Fares are locked for 15 minutes. Free cancellation within 24 hours of booking confirmation.
+                        </p>
+                    </div>
+
+                    <!-- Guarantee Card -->
+                    <div class="bg-surface-container-low p-4 rounded-xl flex items-start gap-3 border border-outline-variant/20">
+                        <span class="material-symbols-outlined text-secondary text-3xl">verified_user</span>
+                        <div>
+                            <span class="block font-bold text-primary text-sm">SkyBound Guarantee</span>
+                            <p class="text-xs text-on-surface-variant leading-relaxed mt-0.5">Includes automatic 24-hour price drop reimbursement and global airport concierge coverage.</p>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 4: BOOKING FORM                           -->
+        <!-- ============================================== -->
+        <div id="booking-view" class="view-panel hidden transition-all duration-300">
+            <div class="max-w-2xl mx-auto px-4 py-12">
+                
+                <!-- Step Indicator -->
+                <div class="flex items-center justify-between mb-8 text-xs font-bold text-outline uppercase tracking-wider">
+                    <div class="flex items-center gap-2 text-secondary">
+                        <span class="w-6 h-6 rounded-full bg-secondary text-white flex items-center justify-center font-bold">1</span>
+                        <span>Passenger details</span>
+                    </div>
+                    <div class="h-0.5 flex-grow mx-4 bg-outline-variant/30"></div>
+                    <div class="flex items-center gap-2 text-outline">
+                        <span class="w-6 h-6 rounded-full bg-surface-container-high text-outline flex items-center justify-center font-bold">2</span>
+                        <span>Confirmation</span>
+                    </div>
+                </div>
+
+                <div class="bg-surface p-8 rounded-2xl card-shadow border border-outline-variant/30 space-y-6">
+                    <h2 class="text-2xl font-extrabold text-primary">Traveler Information</h2>
+                    <p class="text-xs text-on-surface-variant">Please fill in traveler info exactly as shown on government issued passports.</p>
+                    
+                    <form id="passenger-form" class="space-y-4" onsubmit="submitBooking(event)">
+                        <!-- Contact Updates Email -->
+                        <div class="mb-6 bg-surface-container-low p-4 rounded-xl border border-outline-variant/20">
+                            <label class="block text-[10px] font-bold text-outline uppercase tracking-wider mb-2">Contact Email for Flight Updates</label>
+                            <input type="email" required id="form-email" class="w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" placeholder="contact@example.com"/>
+                        </div>
+
+                        <!-- Dynamic Passengers Fields Container -->
+                        <div id="dynamic-passengers-container" class="space-y-6"></div>
+
+                        <div class="pt-6 border-t border-outline-variant/30 flex justify-between items-center">
+                            <button type="button" onclick="navigateTo('details-view')" class="text-sm font-bold text-outline hover:text-primary transition-colors">Cancel</button>
+                            <button type="submit" class="bg-secondary text-white px-8 py-3.5 rounded-xl font-bold text-sm hover:bg-secondary-container hover:shadow-lg transition-all flex items-center gap-1">
+                                <span>Confirm Booking</span>
+                                <span class="material-symbols-outlined text-sm">check_circle</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 5: BOOKING SUCCESS RECEIPT & CALENDAR      -->
+        <!-- ============================================== -->
+        <div id="success-view" class="view-panel hidden transition-all duration-300">
+            <div class="max-w-2xl mx-auto px-4 py-12 space-y-6">
+                <!-- Confirmation Header Banner -->
+                <div class="bg-tertiary text-white p-8 text-center rounded-3xl relative card-shadow border border-tertiary/20">
+                    <span class="material-symbols-outlined text-6xl mb-2">check_circle</span>
+                    <h2 class="text-3xl font-extrabold tracking-tight">Booking Confirmed!</h2>
+                    <p class="text-white/80 text-sm mt-1">Your tickets are successfully booked. Each traveler has an individual ticket below.</p>
+                </div>
+
+                <!-- Dynamic Ticket Cards Container -->
+                <div id="success-tickets-list" class="space-y-6"></div>
+
+                <div class="flex justify-center gap-4 pt-4">
+                    <button onclick="navigateTo('dashboard-view')" class="bg-secondary hover:bg-secondary-container text-white px-8 py-3 rounded-xl font-bold text-sm transition-all duration-300 shadow-sm">View in Dashboard</button>
+                    <button onclick="navigateTo('search-view')" class="text-sm font-bold text-secondary hover:underline">Search Another Flight</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 6: TRAVEL DASHBOARD                       -->
+        <!-- ============================================== -->
+        <div id="dashboard-view" class="view-panel hidden transition-all duration-300">
+            <div class="max-w-[1440px] mx-auto px-4 md:px-12 py-8 space-y-8">
+                
+                <!-- Dashboard Welcome Header -->
+                <header class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <h2 class="text-3xl font-extrabold text-primary" id="dashboard-welcome">Welcome back, Alex</h2>
+                        <p class="text-sm text-on-surface-variant">Here’s what’s happening with your booked trips and active price trackings.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="resetDashboardTrips()" class="bg-surface border border-outline-variant/30 text-xs font-bold text-primary px-4 py-2.5 rounded-lg hover:bg-surface-container-low transition-all">Clear Bookings</button>
+                        <button onclick="navigateTo('search-view')" class="bg-secondary text-white px-4 py-2.5 rounded-lg text-xs font-bold hover:bg-secondary-container transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                            <span>Track New Route</span>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <!-- Bookings List -->
+                    <section class="lg:col-span-8 space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-xl font-extrabold text-primary">Your Booked Trips</h3>
+                            <span class="text-xs font-bold text-on-surface-variant bg-surface px-3 py-1.5 rounded-full border border-outline-variant/20 shadow-sm" id="dashboard-trips-count">0 Booked Trips</span>
+                        </div>
+
+                        <!-- Trips Container -->
+                        <div class="space-y-4" id="dashboard-trips-container">
+                            <!-- Loaded from LocalStorage -->
+                        </div>
+                    </section>
+
+                    <!-- Sidebar: Active Alerts & Saved Deals -->
+                    <aside class="lg:col-span-4 space-y-8">
+                        <!-- Price Trends SVG Block -->
+                        <div class="bg-surface p-6 rounded-2xl card-shadow border border-outline-variant/30 space-y-4">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-secondary">trending_down</span>
+                                <h3 class="font-bold text-sm text-primary uppercase tracking-wide">Tracked Price History</h3>
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center text-xs font-semibold">
+                                    <span class="text-primary font-bold">DEL &rarr; BOM (Mumbai)</span>
+                                    <span class="text-tertiary">Trending Down (-₹1,500)</span>
+                                </div>
+                                <div class="h-20 w-full bg-surface-container-low rounded-lg p-2 relative overflow-hidden">
+                                    <svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 400 100">
+                                        <path d="M0 80 Q 50 70, 100 85 T 200 40 T 300 60 T 400 20" fill="none" stroke="#007AFF" stroke-width="2"></path>
+                                        <path d="M0 80 Q 50 70, 100 85 T 200 40 T 300 60 T 400 20 V 100 H 0 Z" fill="url(#dash-grad)" opacity="0.08"></path>
+                                        <defs>
+                                            <linearGradient id="dash-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                                <stop offset="0%" style="stop-color:#007AFF;"></stop>
+                                                <stop offset="100%" style="stop-color:#007AFF;stop-opacity:0;"></stop>
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
+                                    <span class="absolute bottom-1 left-2 text-[9px] font-bold text-outline uppercase tracking-wider">30 days ago</span>
+                                    <span class="absolute bottom-1 right-2 text-[9px] font-bold text-secondary uppercase tracking-wider">Current: ₹5,800</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Saved Deals -->
+                        <div class="space-y-4">
+                            <h3 class="text-xl font-bold text-primary">Saved Resorts & Deals</h3>
+                            
+                            <div class="space-y-4">
+                                <div class="group cursor-pointer">
+                                    <div class="aspect-video w-full rounded-2xl overflow-hidden mb-2 relative">
+                                        <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80" alt="Santorini Resort"/>
+                                        <div class="absolute top-3 right-3 bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-primary shadow">
+                                            ₹3,500/night
+                                        </div>
+                                    </div>
+                                    <h4 class="text-base font-bold text-primary group-hover:text-secondary transition-colors">Santorini Heights Hotel</h4>
+                                    <p class="text-xs text-on-surface-variant font-medium">Greece • Luxury Suite Deal Saved</p>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Authentication Modal (Sign In / Sign Up) -->
+    <div id="auth-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-primary/45 backdrop-blur-sm px-4">
+        <div class="bg-surface rounded-2xl shadow-2xl border border-outline-variant/30 w-full max-w-md overflow-hidden transform transition-all duration-300">
+            <!-- Modal Header -->
+            <div class="px-6 py-5 border-b border-outline-variant/20 flex justify-between items-center bg-primary-container text-white">
+                <span class="font-extrabold text-lg" id="auth-title">Welcome to SkyBound</span>
+                <button onclick="closeAuthModal()" class="text-white/80 hover:text-white transition-colors flex items-center justify-center">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="flex border-b border-outline-variant/10 text-xs font-bold uppercase tracking-wider text-outline">
+                <button onclick="setAuthTab('login')" id="tab-login" class="flex-1 py-3.5 text-center border-b-2 border-secondary text-secondary font-bold">Log In</button>
+                <button onclick="setAuthTab('signup')" id="tab-signup" class="flex-1 py-3.5 text-center hover:text-primary transition-all duration-200">Sign Up</button>
+            </div>
+            
+            <!-- Content Form -->
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="p-6 space-y-4">
+                <div id="auth-name-container" class="hidden">
+                    <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Full Name</label>
+                    <input type="text" id="auth-name" class="w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" placeholder="Alex Traveler"/>
+                </div>
+                
+                <div>
+                    <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Email Address</label>
+                    <input type="email" required id="auth-email" class="w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" placeholder="alex.traveler@example.com"/>
+                </div>
+                
+                <div>
+                    <label class="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Password</label>
+                    <input type="password" required id="auth-password" class="w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" placeholder="••••••••"/>
+                </div>
+                
+                <div class="flex items-center justify-between text-xs font-semibold text-on-surface-variant pt-1" id="remember-me-container">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="auth-remember" class="w-4 h-4 rounded border-outline-variant text-secondary focus:ring-secondary/20"/>
+                        <span>Remember Me</span>
+                    </label>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" id="auth-submit-btn" class="w-full bg-secondary text-white py-3 rounded-xl font-bold text-sm hover:bg-secondary-container hover:shadow-lg transition-all">
+                        Log In
+                    </button>
+                </div>
+                
+                <div class="text-center pt-2">
+                    <p class="text-xs text-on-surface-variant" id="auth-switch-text">
+                        Don't have an account? <button type="button" onclick="setAuthTab('signup')" class="text-secondary font-bold hover:underline">Sign Up</button>
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-primary text-white border-t border-outline-variant/20 py-12 px-4 md:px-12 w-full mt-auto">
+        <div class="max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+            <div class="space-y-4">
+                <span class="text-2xl font-extrabold text-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-secondary text-3xl">flight_takeoff</span>
+                    <span>SkyBound</span>
+                </span>
+                <p class="text-white/70 text-sm max-w-sm leading-relaxed">
+                    Elevating your travel experience through real-time price intelligence, detailed amenity transparency, and seamless calendar integrations.
+                </p>
+                <div class="pt-2">
+                    <p class="text-xs text-white/50">&copy; 2026 SkyBound Travel Technologies. All rights reserved.</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-x-8 gap-y-4 md:justify-end text-xs font-bold text-white/80 tracking-wide uppercase">
+                <a class="hover:text-secondary transition-colors" href="#">Travel Resources</a>
+                <a class="hover:text-secondary transition-colors" href="#">Currency: USD</a>
+                <a class="hover:text-secondary transition-colors" href="#">Language: English</a>
+                <a class="hover:text-secondary transition-colors" href="#">Privacy Policy</a>
+                <a class="hover:text-secondary transition-colors" href="#">Terms of Service</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Share Fallback Modal -->
+    <div id="share-fallback-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-primary/45 backdrop-blur-sm px-4">
+        <div class="bg-surface rounded-2xl shadow-2xl border border-outline-variant/30 w-full max-w-sm overflow-hidden transform transition-all duration-300">
+            <div class="px-6 py-4 border-b border-outline-variant/20 flex justify-between items-center bg-secondary text-white">
+                <span class="font-bold text-sm">Share Ticket Confirmation</span>
+                <button onclick="closeShareFallbackModal()" class="text-white/80 hover:text-white transition-colors flex items-center justify-center">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+            <div class="p-6 text-center space-y-4">
+                <p class="text-xs text-on-surface-variant font-medium">Copy your booking details to the clipboard to share with others:</p>
+                <button onclick="copyShareText()" class="w-full bg-secondary text-white py-3.5 rounded-xl font-bold text-sm hover:bg-secondary-container hover:shadow-lg transition-all flex items-center justify-center gap-2 shadow-sm">
+                    <span class="material-symbols-outlined text-base">content_copy</span>
+                    <span>Copy Ticket Details</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Verification Simulation Modal -->
+    <div id="verification-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-primary/45 backdrop-blur-sm px-4">
+        <div class="bg-surface rounded-2xl shadow-2xl border border-outline-variant/30 w-full max-w-sm overflow-hidden transform transition-all duration-300">
+            <div class="px-6 py-5 border-b border-outline-variant/20 flex justify-between items-center bg-secondary text-white">
+                <span class="font-extrabold text-base flex items-center gap-2">
+                    <span class="material-symbols-outlined">mail</span>
+                    <span>Verify Email</span>
+                </span>
+            </div>
+            <div class="p-6 text-center space-y-4">
+                <div class="flex justify-center">
+                    <span class="material-symbols-outlined text-secondary text-6xl animate-pulse">mark_email_unread</span>
+                </div>
+                <h3 class="text-lg font-bold text-primary">Confirm Sign Up</h3>
+                <p class="text-xs text-on-surface-variant leading-relaxed">
+                    A confirmation email has been sent to <span id="verification-email-target" class="font-bold text-secondary"></span>.
+                </p>
+                <div class="bg-surface-container-low p-4 rounded-xl border border-outline-variant/20 text-left space-y-3">
+                    <span class="block text-[10px] font-bold text-outline uppercase tracking-wider">Enter OTP Code</span>
+                    <input type="text" id="verification-otp-input" maxlength="6" class="w-full rounded-xl border-outline-variant text-center text-lg font-bold tracking-widest text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-2.5" placeholder="000000"/>
+                    <button onclick="submitVerifyOTP()" class="w-full bg-secondary text-white py-2.5 rounded-lg text-xs font-bold hover:bg-secondary-container transition-all flex items-center justify-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">verified</span>
+                        <span>Verify OTP</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modular Script Imports -->
+    <script src="flights.js"></script>
+    <script src="calendar.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
