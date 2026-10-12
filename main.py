@@ -74,11 +74,11 @@ The SkyBound Team
 """
         msg.attach(MIMEText(body, 'plain'))
         
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_FROM, to_email, msg.as_string())
-        server.quit()
+        # Timeout prevents a blocked SMTP port from hanging the worker thread
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
         print(f"[SMTP] Verification email sent to {to_email} successfully.")
         return True
     except Exception as e:
@@ -91,49 +91,69 @@ def get_db_conn():
         if not PSYCOPG2_AVAILABLE:
             raise RuntimeError("DATABASE_URL environment variable is set for PostgreSQL, but 'psycopg2' is not installed or available.")
         # Connect to cloud PostgreSQL
-        return psycopg2.connect(DATABASE_URL)
+        # connect_timeout avoids hanging forever on a suspended/unreachable DB
+        return psycopg2.connect(DATABASE_URL, connect_timeout=10)
     else:
         # Fallback to local SQLite
         conn = sqlite3.connect(DB_FILE, timeout=20.0)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
+_db_ready = False
+
+def _ensure_db():
+    # Lazy retry: if the DB was unreachable at startup, create tables on first use
+    global _db_ready
+    if not _db_ready:
+        init_db()
+        _db_ready = True
+
 def execute_query(query: str, params: tuple = ()):
+    _ensure_db()
     conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute(query, params)
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 def fetch_one(query: str, params: tuple = ()):
+    _ensure_db()
     conn = get_db_conn()
-    if IS_POSTGRES:
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    else:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-    cursor.execute(query, params)
-    row = cursor.fetchone()
-    conn.close()
-    return row
+    try:
+        if IS_POSTGRES:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchone()
+    finally:
+        conn.close()
 
 def fetch_all(query: str, params: tuple = ()):
+    _ensure_db()
     conn = get_db_conn()
-    if IS_POSTGRES:
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    else:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    try:
+        if IS_POSTGRES:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchall()
+    finally:
+        conn.close()
 
 # Database initialization
 def init_db():
     conn = get_db_conn()
     cursor = conn.cursor()
-    
+
     if IS_POSTGRES:
         # PostgreSQL schema
         cursor.execute("""
@@ -220,7 +240,11 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()
+try:
+    _ensure_db()
+except Exception as e:
+    # Don't crash-loop the service if the DB is asleep; retried on first request
+    print(f"[DB INIT ERROR] {e}")
 
 # Pydantic Schemas
 class UserRegister(BaseModel):
@@ -365,6 +389,11 @@ def add_booking(booking: FlightBooking):
 def clear_bookings(email: str):
     execute_query(f"DELETE FROM bookings WHERE user_email = {PARAM}", (email,))
     return {"status": "success", "message": f"Bookings cleared for {email}"}
+
+@app.get("/health")
+async def health():
+    # Lightweight liveness check: no DB access, runs on the event loop
+    return {"status": "ok"}
 
 @app.get("/")
 def read_index():
