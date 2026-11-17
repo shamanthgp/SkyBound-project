@@ -305,15 +305,21 @@ def init_db():
             )
         """)
     
+    # Commit the CREATE TABLEs first: on Postgres DDL is transactional, so a failed
+    # statement below must never be able to roll the tables back.
+    conn.commit()
+
     # Migrate pending_users tables created before OTP expiry existed
     for col, ddl in (("expires_at", "BIGINT NOT NULL DEFAULT 0"), ("attempts", "INTEGER NOT NULL DEFAULT 0")):
         try:
-            cursor.execute(f"ALTER TABLE pending_users ADD COLUMN {col} {ddl}")
+            if IS_POSTGRES:
+                cursor.execute(f"ALTER TABLE pending_users ADD COLUMN IF NOT EXISTS {col} {ddl}")
+            else:
+                cursor.execute(f"ALTER TABLE pending_users ADD COLUMN {col} {ddl}")
             conn.commit()
         except Exception:
-            conn.rollback()  # column already exists
+            conn.rollback()  # SQLite: column already exists
 
-    conn.commit()
     conn.close()
 
 try:
