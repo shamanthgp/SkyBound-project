@@ -4,6 +4,56 @@ const API_BASE = window.location.protocol === "file:"
     ? "http://127.0.0.1:8000/api" 
     : "/api";
 
+// Escape untrusted text before putting it into innerHTML templates (prevents XSS)
+function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+    ));
+}
+
+// JSON.parse that never throws on corrupted localStorage data
+function safeParse(raw, fallback) {
+    try {
+        const v = JSON.parse(raw);
+        return v ?? fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+// Extract "DEL" from "Delhi (DEL)"; falls back to the full string
+function airportCode(place) {
+    const m = String(place || '').match(/\(([^)]+)\)/);
+    return m ? m[1] : String(place || '');
+}
+function cityName(place) {
+    return String(place || '').split(' (')[0];
+}
+
+// FastAPI returns detail as a string, or a list of {msg} objects for validation errors
+function formatApiError(data, fallback) {
+    const d = data && data.detail;
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d) && d.length) {
+        return d.map(x => String(x.msg || '').replace(/^Value error, /, '')).filter(Boolean).join('\n') || fallback;
+    }
+    return fallback;
+}
+
+function authHeaders(extra = {}) {
+    return currentUser && currentUser.token
+        ? { ...extra, 'Authorization': `Bearer ${currentUser.token}` }
+        : extra;
+}
+
+// Session expired or token invalid: sign out and ask the user to log in again
+function handleSessionExpired() {
+    if (!currentUser) return;
+    handleLogout();
+    alert("Your session has expired. Please log in again.");
+    openAuthModal();
+}
+
 function getLocalYMD(date = new Date()) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -33,11 +83,16 @@ let bookingPendingRedirect = false;
 // Initialization
 window.addEventListener("DOMContentLoaded", async () => {
     // Check if session exists in localStorage
-    const sessionUser = localStorage.getItem("skybound_current_user");
-    if (sessionUser) {
-        currentUser = JSON.parse(sessionUser);
+    const sessionUser = safeParse(localStorage.getItem("skybound_current_user"), null);
+    if (sessionUser && sessionUser.email && sessionUser.token) {
+        currentUser = sessionUser;
         updateHeaderAuthUI();
+    } else {
+        // Sessions saved before tokens existed can't call the API: force a fresh login
+        localStorage.removeItem("skybound_current_user");
     }
+    // Plaintext passwords must never be kept in the browser (older versions did)
+    localStorage.removeItem("skybound_remembered_password");
 
     // Set up date pickers minimum constraints and defaults
     const depInput = document.getElementById('search-dep-date');
@@ -81,17 +136,18 @@ async function loadBookings() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/bookings?email=${encodeURIComponent(currentUser.email)}`);
+        const response = await fetch(`${API_BASE}/bookings`, { headers: authHeaders() });
+        if (response.status === 401) {
+            window.bookings = [];
+            handleSessionExpired();
+            return;
+        }
         if (!response.ok) throw new Error("Backend response error");
         window.bookings = await response.json();
     } catch (e) {
         console.warn("Backend server not reachable. Falling back to local storage.", e);
-        const stored = localStorage.getItem("skybound_bookings");
-        if (stored) {
-            window.bookings = JSON.parse(stored).filter(b => b.userEmail === currentUser.email);
-        } else {
-            window.bookings = [];
-        }
+        const stored = safeParse(localStorage.getItem("skybound_bookings"), []);
+        window.bookings = Array.isArray(stored) ? stored.filter(b => b.userEmail === currentUser.email) : [];
     }
 }
 
@@ -626,21 +682,21 @@ function openBookingForm() {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-on-surface-variant uppercase mb-2">First Name</label>
-                        <input type="text" required class="passenger-first-name w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" value="${prefilledFirst}"/>
+                        <input type="text" required class="passenger-first-name w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" value="${esc(prefilledFirst)}"/>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-on-surface-variant uppercase mb-2">Last Name</label>
-                        <input type="text" required class="passenger-last-name w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" value="${prefilledLast}"/>
+                        <input type="text" required class="passenger-last-name w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" value="${esc(prefilledLast)}"/>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                     <div>
                         <label class="block text-xs font-bold text-on-surface-variant uppercase mb-2">Passport Number</label>
-                        <input type="text" required class="passenger-passport w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" placeholder="A12345678" value="${i === 1 ? 'US1293848A' : ''}"/>
+                        <input type="text" required class="passenger-passport w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" placeholder="A12345678" value=""/>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-on-surface-variant uppercase mb-2">Date of Birth</label>
-                        <input type="date" required class="passenger-dob w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" value="${i === 1 ? '1992-06-15' : ''}"/>
+                        <input type="date" required class="passenger-dob w-full rounded-xl border-outline-variant text-sm font-semibold text-primary focus:border-secondary focus:ring-2 focus:ring-secondary/10 p-3" value=""/>
                     </div>
                 </div>
             `;
@@ -703,9 +759,13 @@ async function submitBooking(event) {
         try {
             const response = await fetch(`${API_BASE}/bookings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify(bookingItem)
             });
+            if (response.status === 401) {
+                handleSessionExpired();
+                return;
+            }
             if (!response.ok) throw new Error("Backend save error");
         } catch (e) {
             console.warn("Backend unreachable. Saving booking locally in browser.", e);
@@ -716,8 +776,8 @@ async function submitBooking(event) {
                 seat: seatId,
                 class: selectedDetailClass,
             };
-            const stored = localStorage.getItem("skybound_bookings");
-            const list = stored ? JSON.parse(stored) : [];
+            const stored = safeParse(localStorage.getItem("skybound_bookings"), []);
+            const list = Array.isArray(stored) ? stored : [];
             list.push(localBooking);
             localStorage.setItem("skybound_bookings", JSON.stringify(list));
         }
@@ -739,7 +799,8 @@ function renderSuccessTickets(tickets) {
     const list = document.getElementById('success-tickets-list');
     if (!list) return;
     list.innerHTML = '';
-    
+    window.lastCreatedTickets = tickets;
+
     tickets.forEach((t, index) => {
         const card = document.createElement('div');
         card.className = "bg-surface rounded-3xl card-shadow border border-outline-variant/30 overflow-hidden";
@@ -764,56 +825,56 @@ function renderSuccessTickets(tickets) {
         card.innerHTML = `
             <div class="px-8 py-4 bg-surface-container-low border-b border-outline-variant/20 flex justify-between items-center">
                 <span class="text-xs font-bold text-outline uppercase tracking-wider">Ticket ${index + 1} of ${tickets.length}</span>
-                <span class="text-sm font-extrabold text-secondary font-mono">${t.confCode}</span>
+                <span class="text-sm font-extrabold text-secondary font-mono">${esc(t.confCode)}</span>
             </div>
-            
+
             <div class="p-8 space-y-6">
                 <div class="flex justify-between items-start">
                     <div>
                         <span class="text-xs font-bold text-outline uppercase tracking-wider block">Passenger Name</span>
-                        <span class="text-base font-bold text-primary">${t.passengerName}</span>
+                        <span class="text-base font-bold text-primary">${esc(t.passengerName)}</span>
                     </div>
                     <div class="text-right">
                         <span class="text-xs font-bold text-outline uppercase tracking-wider block">Seat & Cabin</span>
-                        <span class="text-base font-extrabold text-secondary">${t.seat} (${t.flightClass})</span>
+                        <span class="text-base font-extrabold text-secondary">${esc(t.seat)} (${esc(t.flightClass)})</span>
                     </div>
                 </div>
 
                 <div class="border-t border-dashed border-outline-variant/60 pt-6 space-y-4">
                     <div class="flex justify-between items-center text-sm font-semibold">
-                        <span class="text-outline uppercase text-xs tracking-wider">${t.airline}</span>
-                        <span class="text-primary">${t.flightCode}</span>
+                        <span class="text-outline uppercase text-xs tracking-wider">${esc(t.airline)}</span>
+                        <span class="text-primary">${esc(t.flightCode)}</span>
                     </div>
 
                     <div class="grid grid-cols-3 items-center">
                         <div>
-                            <span class="block text-2xl font-extrabold text-primary">${t.departureTime}</span>
-                            <span class="block text-xs font-bold text-on-surface-variant">${t.origin.match(/\(([^)]+)\)/)[1]}</span>
+                            <span class="block text-2xl font-extrabold text-primary">${esc(t.departureTime)}</span>
+                            <span class="block text-xs font-bold text-on-surface-variant">${esc(airportCode(t.origin))}</span>
                         </div>
                         <div class="flex flex-col items-center">
-                            <span class="text-[10px] text-outline font-medium">${t.duration}</span>
+                            <span class="text-[10px] text-outline font-medium">${esc(t.duration)}</span>
                             <span class="material-symbols-outlined text-outline">arrow_forward</span>
-                            <span class="text-[10px] text-tertiary font-bold uppercase mt-0.5">${t.stops}</span>
+                            <span class="text-[10px] text-tertiary font-bold uppercase mt-0.5">${esc(t.stops)}</span>
                         </div>
                         <div class="text-right">
-                            <span class="block text-2xl font-extrabold text-primary">${t.arrivalTime}</span>
-                            <span class="block text-xs font-bold text-on-surface-variant">${t.dest.match(/\(([^)]+)\)/)[1]}</span>
+                            <span class="block text-2xl font-extrabold text-primary">${esc(t.arrivalTime)}</span>
+                            <span class="block text-xs font-bold text-on-surface-variant">${esc(airportCode(t.dest))}</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="border-t border-outline-variant/20 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <a href="${googleCalUrl}" target="_blank" class="flex items-center justify-center gap-1.5 bg-surface-container-low hover:bg-surface-container-high text-primary py-2.5 rounded-xl border border-outline-variant/35 text-[10px] font-bold shadow-sm transition-all duration-200">
+                    <a href="${esc(googleCalUrl)}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-1.5 bg-surface-container-low hover:bg-surface-container-high text-primary py-2.5 rounded-xl border border-outline-variant/35 text-[10px] font-bold shadow-sm transition-all duration-200">
                         <img class="w-3.5 h-3.5 object-contain" src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar Logo"/>
                         <span>Calendar</span>
                     </a>
                     
-                    <button onclick="downloadICSTicket('${t.confCode}', '${t.passengerName}', '${t.seat}', '${t.flightClass}', '${t.departureTime}', '${t.arrivalTime}', '${t.airline}', '${t.flightCode}', '${t.origin}', '${t.dest}', '${t.depDate}')" class="flex items-center justify-center gap-1.5 bg-surface-container-low hover:bg-surface-container-high text-primary py-2.5 rounded-xl border border-outline-variant/35 text-[10px] font-bold shadow-sm transition-all duration-200">
+                    <button data-conf="${esc(t.confCode)}" onclick="downloadICSByConf(this.dataset.conf)" class="flex items-center justify-center gap-1.5 bg-surface-container-low hover:bg-surface-container-high text-primary py-2.5 rounded-xl border border-outline-variant/35 text-[10px] font-bold shadow-sm transition-all duration-200">
                         <span class="material-symbols-outlined text-secondary text-base">calendar_today</span>
                         <span>iCal (.ics)</span>
                     </button>
 
-                    <button onclick="shareTicket('${t.confCode}', '${t.passengerName}', '${t.seat}', '${t.flightCode}', '${t.origin}', '${t.dest}', '${t.depDate}')" class="flex items-center justify-center gap-1.5 bg-surface-container-low hover:bg-surface-container-high text-primary py-2.5 rounded-xl border border-outline-variant/35 text-[10px] font-bold shadow-sm transition-all duration-200">
+                    <button data-conf="${esc(t.confCode)}" onclick="shareTicketByConf(this.dataset.conf)" class="flex items-center justify-center gap-1.5 bg-surface-container-low hover:bg-surface-container-high text-primary py-2.5 rounded-xl border border-outline-variant/35 text-[10px] font-bold shadow-sm transition-all duration-200">
                         <span class="material-symbols-outlined text-secondary text-base">share</span>
                         <span>Share Ticket</span>
                     </button>
@@ -849,7 +910,7 @@ function openAuthModal() {
     
     if (rememberMe) {
         if (emailInput) emailInput.value = localStorage.getItem("skybound_remembered_email") || '';
-        if (passInput) passInput.value = localStorage.getItem("skybound_remembered_password") || '';
+        if (passInput) passInput.value = '';
         if (rememberCheck) rememberCheck.checked = true;
     } else {
         if (emailInput) emailInput.value = '';
@@ -908,13 +969,15 @@ async function handleAuthSubmit(event) {
             });
             const data = await response.json();
             if (!response.ok) {
-                const errDetail = typeof data.detail === 'object' ? JSON.stringify(data.detail) : data.detail;
-                throw new Error(errDetail || "Registration failed");
+                throw new Error(formatApiError(data, "Registration failed"));
             }
             
             // Show verification simulation modal!
             signupPendingEmail = data.email;
-            
+            if (data.emailed === false) {
+                alert("We couldn't send the verification email right now. If this persists, please contact support.");
+            }
+
             document.getElementById('verification-email-target').innerText = signupPendingEmail;
             
             const otpInput = document.getElementById('verification-otp-input');
@@ -930,8 +993,8 @@ async function handleAuthSubmit(event) {
                 body: JSON.stringify({ email, password })
             });
             if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.detail || "Login failed");
+                const data = await response.json().catch(() => ({}));
+                throw new Error(formatApiError(data, "Login failed"));
             }
             currentUser = await response.json();
         }
@@ -945,11 +1008,9 @@ async function handleAuthSubmit(event) {
         if (rememberCheck && rememberCheck.checked) {
             localStorage.setItem("skybound_remember_me", "true");
             localStorage.setItem("skybound_remembered_email", email);
-            localStorage.setItem("skybound_remembered_password", password);
         } else {
             localStorage.removeItem("skybound_remember_me");
             localStorage.removeItem("skybound_remembered_email");
-            localStorage.removeItem("skybound_remembered_password");
         }
         
         closeAuthModal();
@@ -981,11 +1042,14 @@ async function submitVerifyOTP() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/confirm?email=${encodeURIComponent(signupPendingEmail)}&otp=${encodeURIComponent(otpVal)}`);
+        const response = await fetch(`${API_BASE}/confirm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: signupPendingEmail, otp: otpVal })
+        });
         const data = await response.json();
         if (!response.ok) {
-            const errDetail = typeof data.detail === 'object' ? JSON.stringify(data.detail) : data.detail;
-            throw new Error(errDetail || "OTP verification failed");
+            throw new Error(formatApiError(data, "OTP verification failed"));
         }
         alert("Email verified successfully! Your account has been allocated and you can now log in.");
         document.getElementById('verification-modal').classList.add('hidden');
@@ -1103,29 +1167,29 @@ function updateDashboardTripsList() {
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <span class="text-xs font-bold text-outline-variant uppercase tracking-wider block">Flight Code</span>
-                    <span class="text-lg font-extrabold text-primary">${b.flight.flightCode} (${b.flight.airline})</span>
+                    <span class="text-lg font-extrabold text-primary">${esc(b.flight.flightCode)} (${esc(b.flight.airline)})</span>
                 </div>
                 <div class="text-left md:text-right">
                     <span class="text-xs font-bold text-outline-variant uppercase tracking-wider block">Confirmation</span>
-                    <span class="text-sm font-bold text-secondary font-mono">${b.confCode}</span>
+                    <span class="text-sm font-bold text-secondary font-mono">${esc(b.confCode)}</span>
                 </div>
             </div>
 
             <div class="grid grid-cols-3 items-center border-y border-outline-variant/20 py-4">
                 <div>
                     <span class="text-xs text-outline block">Departure</span>
-                    <span class="text-lg font-extrabold text-primary">${b.flight.departureTime}</span>
-                    <span class="text-xs text-on-surface-variant block font-bold">${b.flight.origin.split(' (')[0]} (${b.flight.origin.match(/\(([^)]+)\)/)[1]})</span>
+                    <span class="text-lg font-extrabold text-primary">${esc(b.flight.departureTime)}</span>
+                    <span class="text-xs text-on-surface-variant block font-bold">${esc(cityName(b.flight.origin))} (${esc(airportCode(b.flight.origin))})</span>
                 </div>
                 <div class="flex flex-col items-center">
-                    <span class="text-[10px] text-outline font-medium">${b.flight.duration}</span>
+                    <span class="text-[10px] text-outline font-medium">${esc(b.flight.duration)}</span>
                     <span class="material-symbols-outlined text-outline">arrow_forward</span>
-                    <span class="text-[10px] text-tertiary font-bold uppercase mt-0.5">${b.flight.stops}</span>
+                    <span class="text-[10px] text-tertiary font-bold uppercase mt-0.5">${esc(b.flight.stops)}</span>
                 </div>
                 <div class="text-right">
                     <span class="text-xs text-outline block">Arrival</span>
-                    <span class="text-lg font-extrabold text-primary">${b.flight.arrivalTime}</span>
-                    <span class="text-xs text-on-surface-variant block font-bold">${b.flight.dest.split(' (')[0]} (${b.flight.dest.match(/\(([^)]+)\)/)[1]})</span>
+                    <span class="text-lg font-extrabold text-primary">${esc(b.flight.arrivalTime)}</span>
+                    <span class="text-xs text-on-surface-variant block font-bold">${esc(cityName(b.flight.dest))} (${esc(airportCode(b.flight.dest))})</span>
                 </div>
             </div>
 
@@ -1133,24 +1197,24 @@ function updateDashboardTripsList() {
                 <div class="flex gap-4 text-xs font-medium">
                     <div>
                         <span class="text-outline">Seat:</span>
-                        <span class="text-primary font-bold ml-1">${b.seat}</span>
+                        <span class="text-primary font-bold ml-1">${esc(b.seat)}</span>
                     </div>
                     <div>
                         <span class="text-outline">Class:</span>
-                        <span class="text-primary font-bold ml-1">${b.class}</span>
+                        <span class="text-primary font-bold ml-1">${esc(b.class)}</span>
                     </div>
                     <div>
                         <span class="text-outline">Cost:</span>
-                        <span class="text-primary font-bold ml-1">${b.price}</span>
+                        <span class="text-primary font-bold ml-1">${esc(b.price)}</span>
                     </div>
                 </div>
 
                 <div class="flex gap-2">
-                    <button onclick="shareTicket('${b.confCode}', '${b.passengerName}', '${b.seat}', '${b.flight.flightCode}', '${b.flight.origin}', '${b.flight.dest}', '${b.depDate}')" class="flex items-center gap-1.5 text-primary hover:text-secondary text-xs font-bold bg-surface-container-low border border-outline-variant/35 px-3 py-1.5 rounded-lg transition-all">
+                    <button data-conf="${esc(b.confCode)}" onclick="shareTicketByConf(this.dataset.conf)" class="flex items-center gap-1.5 text-primary hover:text-secondary text-xs font-bold bg-surface-container-low border border-outline-variant/35 px-3 py-1.5 rounded-lg transition-all">
                         <span class="material-symbols-outlined text-sm">share</span>
                         <span>Share</span>
                     </button>
-                    <button onclick="addDashboardBookingToCalendar('${b.confCode}')" class="flex items-center gap-1.5 text-secondary hover:text-secondary-container text-xs font-bold bg-secondary/5 border border-secondary/20 px-3 py-1.5 rounded-lg transition-all">
+                    <button data-conf="${esc(b.confCode)}" onclick="addDashboardBookingToCalendar(this.dataset.conf)" class="flex items-center gap-1.5 text-secondary hover:text-secondary-container text-xs font-bold bg-secondary/5 border border-secondary/20 px-3 py-1.5 rounded-lg transition-all">
                         <img class="w-4 h-4 object-contain" src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar"/>
                         <span>Add to Calendar</span>
                     </button>
@@ -1166,16 +1230,21 @@ async function resetDashboardTrips() {
     if (!currentUser) return;
     if (confirm("Are you sure you want to clear your flight bookings?")) {
         try {
-            const response = await fetch(`${API_BASE}/bookings?email=${encodeURIComponent(currentUser.email)}`, {
-                method: 'DELETE'
+            const response = await fetch(`${API_BASE}/bookings`, {
+                method: 'DELETE',
+                headers: authHeaders()
             });
+            if (response.status === 401) {
+                handleSessionExpired();
+                return;
+            }
             if (!response.ok) throw new Error("Delete error");
         } catch (e) {
             console.warn("Backend server unreachable. Deleting local storage bookings.", e);
             // Local fallback
-            const stored = localStorage.getItem("skybound_bookings");
-            if (stored) {
-                const list = JSON.parse(stored).filter(b => b.userEmail !== currentUser.email);
+            const stored = safeParse(localStorage.getItem("skybound_bookings"), []);
+            if (Array.isArray(stored)) {
+                const list = stored.filter(b => b.userEmail !== currentUser.email);
                 localStorage.setItem("skybound_bookings", JSON.stringify(list));
             }
         }
@@ -1213,8 +1282,8 @@ function addNewNotification(title, message) {
     item.innerHTML = `
         <span class="material-symbols-outlined text-secondary mt-0.5">info</span>
         <div>
-            <p class="text-sm font-semibold text-on-surface">${title}</p>
-            <p class="text-xs text-on-surface-variant">${message}</p>
+            <p class="text-sm font-semibold text-on-surface">${esc(title)}</p>
+            <p class="text-xs text-on-surface-variant">${esc(message)}</p>
             <span class="text-[10px] text-outline">Just now</span>
         </div>
     `;
@@ -1244,6 +1313,31 @@ function subscribeAlert() {
 // SHARING SYSTEMS LOGIC
 // ==============================================
 let currentShareText = '';
+
+// Look up a ticket by confirmation code (just-booked tickets are flat, API bookings are nested)
+function findTicket(confCode) {
+    const fresh = (window.lastCreatedTickets || []).find(t => t.confCode === confCode);
+    if (fresh) return fresh;
+    const b = (window.bookings || []).find(x => x.confCode === confCode);
+    if (!b) return null;
+    return {
+        confCode: b.confCode, passengerName: b.passengerName, seat: b.seat, flightClass: b.class,
+        departureTime: b.flight.departureTime, arrivalTime: b.flight.arrivalTime,
+        airline: b.flight.airline, flightCode: b.flight.flightCode,
+        origin: b.flight.origin, dest: b.flight.dest, depDate: b.depDate
+    };
+}
+
+function shareTicketByConf(confCode) {
+    const t = findTicket(confCode);
+    if (t) shareTicket(t.confCode, t.passengerName, t.seat, t.flightCode, t.origin, t.dest, t.depDate);
+}
+
+function downloadICSByConf(confCode) {
+    const t = findTicket(confCode);
+    if (t) downloadICSTicket(t.confCode, t.passengerName, t.seat, t.flightClass, t.departureTime,
+                             t.arrivalTime, t.airline, t.flightCode, t.origin, t.dest, t.depDate);
+}
 
 function shareTicket(confCode, name, seat, flightCode, origin, dest, depDate) {
     const text = `SkyBound Ticket Confirmation!\n` +

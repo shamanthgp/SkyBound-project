@@ -101,33 +101,49 @@ function addDashboardBookingToCalendar(confCode) {
     window.open(googleCalUrl, '_blank');
 }
 
+// Escape text per RFC 5545 so names with commas/semicolons/newlines can't break or inject ICS fields
+function icsEscape(text) {
+    return String(text ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\r?\n/g, '\\n');
+}
+
+function icsTimestampNow() {
+    return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
 function downloadICSTicket(confCode, name, seat, flightClass, depTime, arrTime, airline, flightCode, origin, dest, depDate) {
     const dateStr = depDate ? depDate.replace(/-/g, '') : "20261012";
     const startT = parseTimeToUrl(depTime);
     const endT = parseTimeToUrl(arrTime);
 
-    const icsContent = 
-        "BEGIN:VCALENDAR\n" +
-        "VERSION:2.0\n" +
-        "PRODID:-//SkyBound//Flight Scheduling System//EN\n" +
-        "BEGIN:VEVENT\n" +
-        `UID:skybound-booking-${confCode}\n` +
-        `DTSTAMP:${dateStr}T000000Z\n` +
-        `DTSTART:${dateStr}T${startT}\n` +
-        `DTEND:${dateStr}T${endT}\n` +
-        `SUMMARY:SkyBound Flight ${flightCode} (${origin} to ${dest})\n` +
-        `LOCATION:${origin}\n` +
-        `DESCRIPTION:Confirmation: ${confCode}\\nPassenger: ${name}\\nSeat: ${seat} (${flightClass})\\nClass: ${flightClass}\n` +
-        "END:VEVENT\n" +
-        "END:VCALENDAR";
+    // RFC 5545 requires CRLF line endings
+    const icsContent = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//SkyBound//Flight Scheduling System//EN",
+        "BEGIN:VEVENT",
+        `UID:skybound-booking-${icsEscape(confCode)}`,
+        `DTSTAMP:${icsTimestampNow()}`,
+        `DTSTART:${dateStr}T${startT}`,
+        `DTEND:${dateStr}T${endT}`,
+        `SUMMARY:${icsEscape(`SkyBound Flight ${flightCode} (${origin} to ${dest})`)}`,
+        `LOCATION:${icsEscape(origin)}`,
+        `DESCRIPTION:${icsEscape(`Confirmation: ${confCode}\nPassenger: ${name}\nSeat: ${seat} (${flightClass})\nClass: ${flightClass}`)}`,
+        "END:VEVENT",
+        "END:VCALENDAR"
+    ].join("\r\n");
 
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement('a');
     link.href = url;
-    link.download = `SkyBound-Booking-${confCode}.ics`;
+    link.download = `SkyBound-Booking-${String(confCode).replace(/[^\w-]/g, '')}.ics`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
